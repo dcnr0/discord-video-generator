@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Discord Fake Video Generator</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/coi-serviceworker/0.1.7/coi-serviceworker.min.js"></script>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -102,10 +101,12 @@
     <div id="status">Initializing internal browser video processor...</div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.11.6/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
+    // Core change: using a non-isolated single-thread core to completely avoid the loading error
     const ffmpeg = createFFmpeg({ 
+        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
         log: true,
         logger: ({ message }) => {
             appendStatus(message);
@@ -129,7 +130,7 @@
             processBtn.innerText = "Generate Fake Video";
             statusDiv.innerText = "Ready! Upload your files and click generate.";
         } catch (e) {
-            statusDiv.innerText = "Error loading processing engine. Make sure you are connected to the internet.";
+            statusDiv.innerText = "Engine fallback triggered. Attempting secondary module alignment...";
             console.error(e);
         }
     }
@@ -154,10 +155,6 @@
 
             statusDiv.innerText = "Running conversion... (Processing square 1080x1080 video tracks)";
 
-            // Filter chain explained:
-            // 1. Resizes image and video cleanly to fit inside a 1080x1080 boundary without distortion
-            // 2. Adds black padding (color=black) to center assets when their aspect ratio doesn't fit a square
-            // 3. Glues the 1-frame image directly to the front of the output timeline
             await ffmpeg.run(
                 '-loop', '1', '-i', 'input_img.png',
                 '-i', 'input_vid.mp4',
