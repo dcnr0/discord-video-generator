@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Discord Fake Video Generator</title>
+    <script src="coi-serviceworker.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2f3136;
+            color: #dcddde;
+            margin: 0;
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            background-color: #36393f;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            max-width: 500px;
+            width: 100%;
+        }
+        h2 {
+            color: #fff;
+            margin-top: 0;
+            text-align: center;
+            border-bottom: 2px solid #4f545c;
+            padding-bottom: 10px;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #b9bbbe;
+        }
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background: #202225;
+            border: 1px solid #202225;
+            border-radius: 4px;
+            color: #dcddde;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #5865F2;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #4752C4;
+        }
+        button:disabled {
+            background-color: #4f545c;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #2f3136;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            max-height: 150px;
+            overflow-y: auto;
+            border-left: 4px solid #5865F2;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Discord Fake Video Generator</h2>
+    
+    <div class="input-group">
+        <label for="imageInput">1. Select Fake Thumbnail (Image)</label>
+        <input type="file" id="imageInput" accept="image/*">
+    </div>
+
+    <div class="input-group">
+        <label for="videoInput">2. Select Real Video (MP4)</label>
+        <input type="file" id="videoInput" accept="video/mp4">
+    </div>
+
+    <button id="processBtn" disabled>Loading FFmpeg Engine...</button>
+
+    <div id="status">Initializing internal browser video processor...</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ffmpeg/0.11.6/ffmpeg.min.js"></script>
+<script>
+    const { createFFmpeg, fetchFile } = FFmpeg;
+    const ffmpeg = createFFmpeg({ 
+        log: true,
+        logger: ({ message }) => {
+            appendStatus(message);
+        }
+    });
+
+    const imageInput = document.getElementById('imageInput');
+    const videoInput = document.getElementById('videoInput');
+    const processBtn = document.getElementById('processBtn');
+    const statusDiv = document.getElementById('status');
+
+    function appendStatus(text) {
+        statusDiv.innerText += '\n' + text;
+        statusDiv.scrollTop = statusDiv.scrollHeight;
+    }
+
+    async function init() {
+        try {
+            await ffmpeg.load();
+            processBtn.disabled = false;
+            processBtn.innerText = "Generate Fake Video";
+            statusDiv.innerText = "Ready! Upload your files and click generate.";
+        } catch (e) {
+            statusDiv.innerText = "Error loading processing engine. Make sure you are connected to the internet.";
+            console.error(e);
+        }
+    }
+    init();
+
+    processBtn.addEventListener('click', async () => {
+        const imageFile = imageInput.files[0];
+        const videoFile = videoInput.files[0];
+
+        if (!imageFile || !videoFile) {
+            alert("Please select both an image and a video file.");
+            return;
+        }
+
+        processBtn.disabled = true;
+        processBtn.innerText = "Processing...";
+        statusDiv.innerText = "Reading files...";
+
+        try {
+            ffmpeg.FS('writeFile', 'input_img.png', await fetchFile(imageFile));
+            ffmpeg.FS('writeFile', 'input_vid.mp4', await fetchFile(videoFile));
+
+            statusDiv.innerText = "Running conversion... (Processing square 1080x1080 video tracks)";
+
+            // Filter chain explained:
+            // 1. Resizes image and video cleanly to fit inside a 1080x1080 boundary without distortion
+            // 2. Adds black padding (color=black) to center assets when their aspect ratio doesn't fit a square
+            // 3. Glues the 1-frame image directly to the front of the output timeline
+            await ffmpeg.run(
+                '-loop', '1', '-i', 'input_img.png',
+                '-i', 'input_vid.mp4',
+                '-filter_complex', 
+                '[0:v]scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30[img];' +
+                '[1:v]scale=1080:1080:force_original_aspect_ratio=decrease,pad=1080:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps=30[vid];' +
+                '[img][vid]concat=n=2:v=1:a=0[v]',
+                '-map', '[v]',
+                '-map', '1:a?',
+                '-c:v', 'libx264',
+                '-pix_fmt', 'yuv420p',
+                '-c:a', 'aac',
+                '-shortest',
+                'output.mp4'
+            );
+
+            statusDiv.innerText = "Finalizing video package...";
+
+            const data = ffmpeg.FS('readFile', 'output.mp4');
+
+            const blob = new Blob([data.buffer], { type: 'video/mp4' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'discord_fake_video_1080p.mp4';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            statusDiv.innerText = "Success! Your square 1080x1080 video has been downloaded.";
+        } catch (error) {
+            statusDiv.innerText = "An error occurred during processing. Check browser console log.";
+            console.error(error);
+        } finally {
+            processBtn.disabled = false;
+            processBtn.innerText = "Generate Fake Video";
+        }
+    });
+</script>
+
+</body>
+</html>
