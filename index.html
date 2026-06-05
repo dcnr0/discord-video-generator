@@ -104,9 +104,11 @@
 <script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
 <script>
     const { createFFmpeg, fetchFile } = FFmpeg;
-    // Core change: using a non-isolated single-thread core to completely avoid the loading error
-    const ffmpeg = createFFmpeg({ 
-        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
+    
+    // Explicitly loading the Single-Threaded Core build to bypass GitHub Pages server headers entirely
+    const ffmpeg = createFFmpeg({
+        mainName: 'main',
+        corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core-st@0.11.1/dist/ffmpeg-core.js',
         log: true,
         logger: ({ message }) => {
             appendStatus(message);
@@ -130,7 +132,7 @@
             processBtn.innerText = "Generate Fake Video";
             statusDiv.innerText = "Ready! Upload your files and click generate.";
         } catch (e) {
-            statusDiv.innerText = "Engine fallback triggered. Attempting secondary module alignment...";
+            statusDiv.innerText = "Error initializing core module layers. Try clearing browser cache.";
             console.error(e);
         }
     }
